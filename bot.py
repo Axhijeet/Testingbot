@@ -1,100 +1,79 @@
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
-import asyncio
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
 import logging
 
-# Your bot's token
-BOT_TOKEN = "7718588788:AAEWGS4etPSNhOpzZZqgW8c1Y3AF3RGvc1g"
-
-# Your channel ID (replace with the correct channel ID)
-CHANNEL_ID = -100754041005  # Use your actual channel ID
+# Your bot's token and channel username
+BOT_TOKEN = "7718588788:AAEWGS4etPSNhOpzZZqgW8c1Y3AF3RGvc1g"  # Your bot token
+CHANNEL_USERNAME = "@channelwishal"  # Your channel's username
 
 # Enable logging
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-# Function to send the menu to the channel
-async def send_menu(context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("Code", callback_data="menu_code")],
-        [InlineKeyboardButton("Guide", callback_data="menu_guide")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+# Function to check if the user is a member of the channel
+async def is_member_of_channel(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        # Check if the user is a member of the channel
+        member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        if member.status in ["member", "administrator", "creator"]:
+            return True
+        else:
+            return False
+    except Exception as e:
+        logger.error(f"Error checking membership: {e}")
+        return False
 
-    # Post the message with the menu
-    await context.bot.send_message(
-        chat_id=CHANNEL_ID,
-        text="Welcome! Please choose an option from the menu below:",
-        reply_markup=reply_markup,
+# Function to send the floating menu
+async def send_floating_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [KeyboardButton("Code")],
+        [KeyboardButton("Guide")]
+    ]
+    
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
+    await update.message.reply_text(
+        "Welcome! Please choose an option below:",
+        reply_markup=reply_markup
     )
 
-# Function to handle the button interaction
-async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+# Command to start the bot and check channel membership
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
 
-    # Check if the user is an admin or a normal user
-    user = query.from_user
-    is_admin = False
-
-    try:
-        # Get the list of admins
-        admins = await context.bot.get_chat_administrators(CHANNEL_ID)
-
-        # Check if the user is an admin
-        is_admin = any(admin.user.id == user.id for admin in admins)
-
-    except Exception as e:
-        logger.error(f"Failed to check admin status: {e}")
-
-    if is_admin:
-        await query.edit_message_text(
-            text=f"Hello Admin {user.first_name}, you've clicked the menu button!\n\nChoose an option.",
-        )
+    # Check if the user is a member of the channel
+    if await is_member_of_channel(user_id, context):
+        await send_floating_menu(update, context)
     else:
-        if query.data == "menu_code":
-            await query.edit_message_text(
-                text="Here's the code:\n```print('Hello World!')```",
-                parse_mode="Markdown",
-            )
-        elif query.data == "menu_guide":
-            await query.edit_message_text(
-                text="Here's the guide:\n1. Open Telegram.\n2. Interact with the bot.\n3. Choose an option."
-            )
+        # If not a member, prompt the user to join
+        join_button = InlineKeyboardButton("Join Channel", url=f"https://t.me/{CHANNEL_USERNAME}")
+        reply_markup = InlineKeyboardMarkup([[join_button]])
 
-# Function to block any text messages
-async def block_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.delete()
+        await update.message.reply_text(
+            f"Please join the channel {CHANNEL_USERNAME} to use the bot. Click below to join:",
+            reply_markup=reply_markup
+        )
+
+# Function to handle the button interactions (Code/Guide)
+async def menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message
+
+    if query.text == "Code":
+        await query.reply_text("Here's the code:\n```print('Hello World!')```", parse_mode="Markdown")
+    elif query.text == "Guide":
+        await query.reply_text("Here's the guide:\n1. Open Telegram.\n2. Interact with the bot.\n3. Choose an option.")
 
 # Main function to set up the bot
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Periodically post the menu every 30 seconds
-    async def periodic_post():
-        while True:
-            await send_menu(application)
-            await asyncio.sleep(30)  # Post every 30 seconds
+    # Add the /start command handler
+    application.add_handler(CommandHandler("start", start))
 
-    # Schedule the periodic menu posting
-    application.job_queue.run_once(periodic_post, when=0)
+    # Add the menu button handler
+    application.add_handler(MessageHandler(filters.Regex('^(Code|Guide)$'), menu_handler))
 
-    # Add handler for menu button clicks
-    application.add_handler(CallbackQueryHandler(menu_handler))
-
-    # Block text messages from users
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, block_messages))
-
-    # Add the error handler
-    application.add_error_handler(lambda update, context: logger.error(f"Error occurred: {context.error}"))
-
-    print("Bot is running...")
+    # Run the bot
     application.run_polling()
 
 if __name__ == "__main__":
