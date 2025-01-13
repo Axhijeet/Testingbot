@@ -4,8 +4,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 
 # Bot token and channel IDs
 BOT_TOKEN = "7796769189:AAEsUfo32JREhiDTCodQuG9OAjS2LTeMIG4"
-MAIN_CHANNEL_ID = -1002349828866
-SECONDARY_CHANNEL_ID = -1002407865494
+MAIN_CHANNEL_ID = -1002211085308
+SECONDARY_CHANNEL_ID = -1002382553093
 
 # Enable logging
 logging.basicConfig(
