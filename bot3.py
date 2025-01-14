@@ -6,7 +6,7 @@ import os
 import json
 
 # ---- Replace with your bot token ----
-TOKEN = "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I"
+TOKEN = "AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I"
 
 # File to store recipient ID
 RECIPIENT_FILE = "recipient.json"
@@ -188,7 +188,7 @@ async def main():
     application.add_handler(CallbackQueryHandler(button_handler))
 
     # Handle text messages (for ID and message input)
-    application.add_handler(MessageHandler(Filters.text, handle_message_input))
+    application.add_handler(MessageHandler(Filters.TEXT, handle_message_input))
 
     # Start the bot
     await application.run_polling()
