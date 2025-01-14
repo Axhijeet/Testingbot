@@ -1,9 +1,8 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import random
-import asyncio
 
-# Sample data
+# Sample data for the German language bot
 vocab = [
     {"word": "Haus", "meaning": "House", "example": "Das Haus ist groß."},
     {"word": "Buch", "meaning": "Book", "example": "Ich lese ein Buch."},
@@ -48,7 +47,7 @@ def main():
     application.add_handler(CommandHandler("quiz", start_quiz))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_answer))
 
-    # Start the bot
+    # Start the bot with polling
     print("Bot is running...")
     application.run_polling()
 
