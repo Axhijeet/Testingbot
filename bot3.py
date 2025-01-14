@@ -1,4 +1,5 @@
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import random
 
 # Sample data
@@ -14,43 +15,42 @@ quizzes = [
 ]
 
 # Function to send a daily word
-def send_daily_word(update, context):
+async def send_daily_word(update: Update, context: ContextTypes.DEFAULT_TYPE):
     word = random.choice(vocab)
     message = f"*Word*: {word['word']}\n*Meaning*: {word['meaning']}\n*Example*: {word['example']}"
-    update.message.reply_text(message, parse_mode="Markdown")
+    await update.message.reply_text(message, parse_mode="Markdown")
 
 # Function to start a quiz
-def start_quiz(update, context):
+async def start_quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quiz = random.choice(quizzes)
     options = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(quiz['options'])])
     message = f"{quiz['question']}\n\n{options}"
     context.user_data['answer'] = quiz['answer']
-    update.message.reply_text(message)
+    await update.message.reply_text(message)
 
 # Function to check user's quiz answer
-def check_answer(update, context):
+async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_answer = update.message.text.strip()
     correct_answer = context.user_data.get('answer')
     if user_answer.lower() == correct_answer.lower():
-        update.message.reply_text("✅ Correct!")
+        await update.message.reply_text("✅ Correct!")
     else:
-        update.message.reply_text(f"❌ Wrong! The correct answer is {correct_answer}.")
+        await update.message.reply_text(f"❌ Wrong! The correct answer is {correct_answer}.")
 
 # Main function to run the bot
-def main():
+async def main():
     # Replace 'YOUR_BOT_TOKEN' with your actual bot token
-    updater = Updater("7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I", use_context=True)
-    dp = updater.dispatcher
+    application = Application.builder().token("7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I").build()
 
     # Add command handlers
-    dp.add_handler(CommandHandler("dailyword", send_daily_word))
-    dp.add_handler(CommandHandler("quiz", start_quiz))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, check_answer))
+    application.add_handler(CommandHandler("dailyword", send_daily_word))
+    application.add_handler(CommandHandler("quiz", start_quiz))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, check_answer))
 
     # Start the bot
-    updater.start_polling()
     print("Bot is running...")
-    updater.idle()
+    await application.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
