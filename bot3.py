@@ -180,7 +180,7 @@ def button_handler(update, context):
 
 def main():
     """Start the bot."""
-    updater = Updater(TOKEN, use_context=True)
+    updater = Updater(TOKEN)    
     dispatcher = updater.dispatcher
 
     # Add command handler to handle /start command
