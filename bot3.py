@@ -1,176 +1,201 @@
+import telegram
+from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler, Filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 import os
-import telegram
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
-import requests
-from bs4 import BeautifulSoup
-import pysrt
-from io import BytesIO
-import re
 import json
 
-# Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+# ---- Replace with your bot token ----
+TOKEN = "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I"
 
-BOT_TOKEN = "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I"  # Replace with your actual bot token
+# File to store recipient ID
+RECIPIENT_FILE = "recipient.json"
 
-def google_search(query):
-    """Performs a Google search to find a subscene search page."""
-    search_query = f"{query} site:subscene.com"
-    url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}"
-    try:
-      headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      }
-      response = requests.get(url, headers=headers)
-      response.raise_for_status()
-      soup = BeautifulSoup(response.content, 'html.parser')
-      search_results = soup.find_all('a', href=True)
-      
-      for result in search_results:
-          link = result.get('href')
-          if link.startswith('https://subscene.com/subtitles/') and not link.endswith("#"):
-               return link
-      
-      return None
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Google search error: {e}")
-        return None
-    
-    except Exception as e:
-       logger.error(f"Unexpected error while searching on Google: {e}")
-       return None
-    
-def extract_subtitle_download_link(search_url):
-    """Extracts the download link of the first subtitle in English from the subscene page."""
-    try:
-        headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        }
-        response = requests.get(search_url,headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
 
-        # Find the first English subtitle row
-        subtitle_rows = soup.find_all('tr')
-        for row in subtitle_rows:
-           lang_td = row.find("td", class_="language")
-           if lang_td and lang_td.get_text(strip=True).lower() == "english":
-                link_anchor = row.find("a", href=True)
-                if link_anchor:
-                    subtitle_page_url = "https://subscene.com" + link_anchor['href']
-                    return subtitle_page_url
-        return None
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Subscene page error: {e}")
-        return None
+def load_recipient_id():
+    """Loads the recipient ID from file or returns None."""
+    if os.path.exists(RECIPIENT_FILE):
+        with open(RECIPIENT_FILE, "r") as f:
+            try:
+                data = json.load(f)
+                return data.get("recipient_id")
+            except json.JSONDecodeError:
+                return None
+    return None
 
-    except Exception as e:
-       logger.error(f"Unexpected error while extracting subtitle link: {e}")
-       return None
+def save_recipient_id(recipient_id):
+    """Saves the recipient ID to file."""
+    with open(RECIPIENT_FILE, "w") as f:
+        json.dump({"recipient_id": recipient_id}, f)
 
-def get_subtitle_download_link_from_subtitle_page(subtitle_page_url):
-    try:
-        headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-         }
-        response = requests.get(subtitle_page_url,headers=headers)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.content, 'html.parser')
+# Dictionary to store user message drafts
+user_message_drafts = {}
 
-        download_link = soup.find('a', id='downloadButton', href=True)
-        if download_link:
-           return "https://subscene.com" + download_link['href']
-        return None
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Subscene download page error: {e}")
-        return None
-    
-    except Exception as e:
-       logger.error(f"Unexpected error while extracting subtitle download link: {e}")
-       return None
-    
-def download_subtitle(subtitle_link):
-    try:
-      headers = {
-       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-       }
-      response = requests.get(subtitle_link, headers=headers)
-      response.raise_for_status()
-      subtitle_content = response.content
-      return subtitle_content, None
-    
-    except requests.exceptions.RequestException as e:
-            return None, f"Error downloading subtitle file: {e}"
-    
-    except Exception as e:
-        return None, f"Unexpected error while downloading subtitle: {e}"
+# State enumeration
+class BotState:
+    IDLE = 0
+    SETTING_RECIPIENT = 1
+    ENTERING_MESSAGE = 2
+    CONFIRMING_SEND = 3
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    logger.info(f"Received message: {text}")
 
-    # Use Google to find the subscene URL
-    subscene_search_url = google_search(text)
+def start(update, context):
+    """Send a welcoming message and show main menu."""
+    show_main_menu(update, context)
 
-    if not subscene_search_url:
-      await update.message.reply_text("No subscene search results found")
-      return
-    
-    # Extract the subtitle link from subscene search page
-    subtitle_page_url = extract_subtitle_download_link(subscene_search_url)
-    if not subtitle_page_url:
-         await update.message.reply_text("No English subtitle download found on the subscene page.")
-         return
 
-    # Get the actual subtitle download link
-    download_link = get_subtitle_download_link_from_subtitle_page(subtitle_page_url)
+def show_main_menu(update, context):
+    """Display the main menu options."""
+    keyboard = [
+        [InlineKeyboardButton("Set Recipient ID", callback_data='set_recipient')],
+        [InlineKeyboardButton("Enter Message", callback_data='enter_message')],
+        [InlineKeyboardButton("Send Message", callback_data='send_message')],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.message:
+        update.message.reply_text('Please select an action:', reply_markup=reply_markup)
+    elif update.callback_query:
+         query = update.callback_query
+         query.edit_message_text('Please select an action:', reply_markup=reply_markup)
 
-    if not download_link:
-       await update.message.reply_text("No subtitle download link found on subtitle page")
-       return
+def set_recipient_id(update, context):
+    """Prompt the user to enter a new recipient ID."""
+    query = update.callback_query
+    context.user_data['state'] = BotState.SETTING_RECIPIENT
+    query.edit_message_text("Please enter the new recipient's User ID:")
 
-    #Download the subtitle file
-    subtitle_content, error = download_subtitle(download_link)
+def enter_message(update, context):
+    """Prompt the user to enter the message they want to send."""
+    query = update.callback_query
+    context.user_data['state'] = BotState.ENTERING_MESSAGE
+    query.edit_message_text("Please enter the message you want to send:")
 
-    if error:
-         await update.message.reply_text(error)
-         return
+def handle_message_input(update, context):
+  """Handles the user's message based on the bot's current state."""
+  user_id = update.message.chat.id
 
-    
-    # Check if subtitle file has content
-    if not subtitle_content:
-      await update.message.reply_text("Failed to retrieve subtitle content.")
-      return
-    
-    # Convert byte content to file
-    subtitle_file = BytesIO(subtitle_content)
-    
-    try:
-        await context.bot.send_document(chat_id=update.message.chat_id, document=subtitle_file, filename=f"{text}.srt")
-    except Exception as e:
-          await update.message.reply_text(f"Error while sending subtitle file: {e}")
-          return
+  if context.user_data.get('state') == BotState.SETTING_RECIPIENT:
+      try:
+          recipient_id = int(update.message.text)
+          save_recipient_id(recipient_id)
+          update.message.reply_text(f"Recipient ID set to {recipient_id}")
+          context.user_data['state'] = BotState.IDLE
+          show_main_menu(update, context)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hello! I'm a subtitle bot. Just send me the name of a movie or show and I'll try to find the English subtitles for you.")
+      except ValueError:
+          update.message.reply_text("Invalid User ID format. Please enter a valid numeric ID.")
 
-def main():
-    
-    if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN":
-        logger.error("Please provide a valid BOT_TOKEN.")
+  elif context.user_data.get('state') == BotState.ENTERING_MESSAGE:
+      user_message_drafts[user_id] = update.message.text
+      update.message.reply_text("Message saved!")
+      context.user_data['state'] = BotState.IDLE
+      show_main_menu(update, context)
+
+  else:
+      update.message.reply_text("Please use menu options to interact.")
+
+
+def send_message(update, context):
+    """Display a confirmation message with the current recipient and message."""
+    query = update.callback_query
+    user_id = update.effective_user.id
+    recipient_id = load_recipient_id()
+    message = user_message_drafts.get(user_id)
+
+    if not recipient_id:
+        query.answer(text="Please set a recipient ID first.", show_alert=True)
         return
 
-    application = ApplicationBuilder().token(BOT_TOKEN).build()
+    if not message:
+        query.answer(text="Please enter a message first.", show_alert=True)
+        return
 
-    application.add_handler(CommandHandler('help', help_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    context.user_data['state'] = BotState.CONFIRMING_SEND
 
-    application.run_polling()
+    keyboard = [
+        [InlineKeyboardButton("Confirm Send", callback_data='confirm_send')],
+        [InlineKeyboardButton("Edit Message", callback_data='edit_message')],
+        [InlineKeyboardButton("Edit Recipient ID", callback_data='set_recipient')],
+        [InlineKeyboardButton("Cancel", callback_data='cancel_send')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    query.edit_message_text(
+        f"Recipient ID: {recipient_id}\nMessage: {message}\n\nConfirm or Edit?",
+        reply_markup=reply_markup
+    )
+
+def confirm_send(update, context):
+  """Sends the message to the recipient."""
+  query = update.callback_query
+  user_id = update.effective_user.id
+  recipient_id = load_recipient_id()
+  message = user_message_drafts.get(user_id)
+
+  try:
+    context.bot.send_message(chat_id=recipient_id, text=f"Message from {update.effective_user.username} ({update.effective_user.id}): {message}")
+    query.edit_message_text("Message sent!")
+    user_message_drafts.pop(user_id, None)
+    context.user_data['state'] = BotState.IDLE
+  except Exception as e:
+    query.edit_message_text(f"Failed to send message. Please check bot logs for errors: {e}")
+    logging.error(f"Error sending message: {e}")
+
+
+def edit_message(update, context):
+   """Allows the user to edit the message."""
+   query = update.callback_query
+   context.user_data['state'] = BotState.ENTERING_MESSAGE
+   query.edit_message_text("Please enter new message to send.")
+
+
+def cancel_send(update, context):
+  """Cancels the message and shows the main menu."""
+  query = update.callback_query
+  query.answer(text="Send cancelled.", show_alert=True)
+  context.user_data['state'] = BotState.IDLE
+  show_main_menu(update, context)
+
+def button_handler(update, context):
+  """Handles button callbacks."""
+  query = update.callback_query
+  query.answer()  # Acknowledge the callback
+
+  if query.data == 'set_recipient':
+    set_recipient_id(update, context)
+  elif query.data == 'enter_message':
+    enter_message(update, context)
+  elif query.data == 'send_message':
+    send_message(update, context)
+  elif query.data == 'confirm_send':
+    confirm_send(update, context)
+  elif query.data == 'edit_message':
+    edit_message(update, context)
+  elif query.data == 'cancel_send':
+    cancel_send(update, context)
+
+def main():
+    """Start the bot."""
+    updater = Updater(TOKEN, use_context=True)
+    dispatcher = updater.dispatcher
+
+    # Add command handler to handle /start command
+    dispatcher.add_handler(CommandHandler("start", start))
+
+    # Add handler for handling button presses
+    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+
+    # Handle text messages (for ID and message input)
+    dispatcher.add_handler(MessageHandler(Filters.text, handle_message_input))
+
+    # Start the bot
+    updater.start_polling()
+
+    # Run the bot until you press Ctrl-C
+    updater.idle()
 
 if __name__ == '__main__':
     main()
