@@ -180,16 +180,15 @@ async def button_handler(update, context):
 async def main():
     """Start the bot."""
     application = Application.builder().token(TOKEN).build()
-    dispatcher = application.dispatcher
 
     # Add command handler to handle /start command
-    dispatcher.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("start", start))
 
     # Add handler for handling button presses
-    dispatcher.add_handler(CallbackQueryHandler(button_handler))
+    application.add_handler(CallbackQueryHandler(button_handler))
 
     # Handle text messages (for ID and message input)
-    dispatcher.add_handler(MessageHandler(Filters.text, handle_message_input))
+    application.add_handler(MessageHandler(Filters.text, handle_message_input))
 
     # Start the bot
     await application.run_polling()
