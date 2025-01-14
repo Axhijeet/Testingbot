@@ -2,6 +2,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import random
 import logging
+from flask import Flask, request
 
 # Configure logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -47,6 +48,16 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
+# Create Flask app for webhook handling
+app = Flask(__name__)
+
+@app.route('/' + "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I", methods=['POST'])
+def handle_webhook():
+    json_str = request.get_data(as_text=True)
+    update = Update.de_json(json_str, application.bot)
+    application.process_update(update)
+    return 'ok'
+
 # Main function to run the bot
 def main():
     # Replace 'YOUR_BOT_TOKEN' with your actual bot token
@@ -60,9 +71,11 @@ def main():
     # Add error handler
     application.add_error_handler(error_handler)
 
-    # Start the bot with polling
-    print("Bot is running...")
-    application.run_polling()
+    # Set up webhook (use your deployment URL)
+    application.bot.set_webhook("https://germanbot-im4u.onrender.com/" + "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I")
+
+    # Start Flask server for webhooks
+    app.run(host="0.0.0.0", port=5000)
 
 if __name__ == "__main__":
     main()
