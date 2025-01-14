@@ -1,6 +1,7 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import random
+import asyncio
 
 # Sample data
 vocab = [
@@ -38,7 +39,7 @@ async def check_answer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Wrong! The correct answer is {correct_answer}.")
 
 # Main function to run the bot
-async def main():
+def main():
     # Replace 'YOUR_BOT_TOKEN' with your actual bot token
     application = Application.builder().token("7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I").build()
 
@@ -49,8 +50,7 @@ async def main():
 
     # Start the bot
     print("Bot is running...")
-    await application.run_polling()
+    application.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    main()
