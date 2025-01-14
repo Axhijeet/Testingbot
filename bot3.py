@@ -14,7 +14,7 @@ import json
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"  # Replace with your actual bot token
+BOT_TOKEN = "7627790175:AAF7OmcCCxYxOwv5jl1dPEJDkCJb8AOMe2I"  # Replace with your actual bot token
 
 def google_search(query):
     """Performs a Google search to find a subscene search page."""
