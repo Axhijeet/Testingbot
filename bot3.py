@@ -1,6 +1,5 @@
 import telegram
-from telegram.ext import Updater, CommandHandler, MessageHandler, CallbackQueryHandler
-from telegram.ext import filters as Filters # Modified Import
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters as Filters
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 import logging
 import os
@@ -44,12 +43,12 @@ class BotState:
     CONFIRMING_SEND = 3
 
 
-def start(update, context):
+async def start(update, context):
     """Send a welcoming message and show main menu."""
-    show_main_menu(update, context)
+    await show_main_menu(update, context)
 
 
-def show_main_menu(update, context):
+async def show_main_menu(update, context):
     """Display the main menu options."""
     keyboard = [
         [InlineKeyboardButton("Set Recipient ID", callback_data='set_recipient')],
@@ -58,24 +57,24 @@ def show_main_menu(update, context):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     if update.message:
-        update.message.reply_text('Please select an action:', reply_markup=reply_markup)
+        await update.message.reply_text('Please select an action:', reply_markup=reply_markup)
     elif update.callback_query:
          query = update.callback_query
-         query.edit_message_text('Please select an action:', reply_markup=reply_markup)
+         await query.edit_message_text('Please select an action:', reply_markup=reply_markup)
 
-def set_recipient_id(update, context):
+async def set_recipient_id(update, context):
     """Prompt the user to enter a new recipient ID."""
     query = update.callback_query
     context.user_data['state'] = BotState.SETTING_RECIPIENT
-    query.edit_message_text("Please enter the new recipient's User ID:")
+    await query.edit_message_text("Please enter the new recipient's User ID:")
 
-def enter_message(update, context):
+async def enter_message(update, context):
     """Prompt the user to enter the message they want to send."""
     query = update.callback_query
     context.user_data['state'] = BotState.ENTERING_MESSAGE
-    query.edit_message_text("Please enter the message you want to send:")
+    await query.edit_message_text("Please enter the message you want to send:")
 
-def handle_message_input(update, context):
+async def handle_message_input(update, context):
   """Handles the user's message based on the bot's current state."""
   user_id = update.message.chat.id
 
@@ -83,24 +82,24 @@ def handle_message_input(update, context):
       try:
           recipient_id = int(update.message.text)
           save_recipient_id(recipient_id)
-          update.message.reply_text(f"Recipient ID set to {recipient_id}")
+          await update.message.reply_text(f"Recipient ID set to {recipient_id}")
           context.user_data['state'] = BotState.IDLE
-          show_main_menu(update, context)
+          await show_main_menu(update, context)
 
       except ValueError:
-          update.message.reply_text("Invalid User ID format. Please enter a valid numeric ID.")
+          await update.message.reply_text("Invalid User ID format. Please enter a valid numeric ID.")
 
   elif context.user_data.get('state') == BotState.ENTERING_MESSAGE:
       user_message_drafts[user_id] = update.message.text
-      update.message.reply_text("Message saved!")
+      await update.message.reply_text("Message saved!")
       context.user_data['state'] = BotState.IDLE
-      show_main_menu(update, context)
+      await show_main_menu(update, context)
 
   else:
-      update.message.reply_text("Please use menu options to interact.")
+      await update.message.reply_text("Please use menu options to interact.")
 
 
-def send_message(update, context):
+async def send_message(update, context):
     """Display a confirmation message with the current recipient and message."""
     query = update.callback_query
     user_id = update.effective_user.id
@@ -108,11 +107,11 @@ def send_message(update, context):
     message = user_message_drafts.get(user_id)
 
     if not recipient_id:
-        query.answer(text="Please set a recipient ID first.", show_alert=True)
+        await query.answer(text="Please set a recipient ID first.", show_alert=True)
         return
 
     if not message:
-        query.answer(text="Please enter a message first.", show_alert=True)
+        await query.answer(text="Please enter a message first.", show_alert=True)
         return
 
     context.user_data['state'] = BotState.CONFIRMING_SEND
@@ -124,12 +123,12 @@ def send_message(update, context):
         [InlineKeyboardButton("Cancel", callback_data='cancel_send')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    query.edit_message_text(
+    await query.edit_message_text(
         f"Recipient ID: {recipient_id}\nMessage: {message}\n\nConfirm or Edit?",
         reply_markup=reply_markup
     )
 
-def confirm_send(update, context):
+async def confirm_send(update, context):
   """Sends the message to the recipient."""
   query = update.callback_query
   user_id = update.effective_user.id
@@ -137,51 +136,51 @@ def confirm_send(update, context):
   message = user_message_drafts.get(user_id)
 
   try:
-    context.bot.send_message(chat_id=recipient_id, text=f"Message from {update.effective_user.username} ({update.effective_user.id}): {message}")
-    query.edit_message_text("Message sent!")
+    await context.bot.send_message(chat_id=recipient_id, text=f"Message from {update.effective_user.username} ({update.effective_user.id}): {message}")
+    await query.edit_message_text("Message sent!")
     user_message_drafts.pop(user_id, None)
     context.user_data['state'] = BotState.IDLE
   except Exception as e:
-    query.edit_message_text(f"Failed to send message. Please check bot logs for errors: {e}")
+    await query.edit_message_text(f"Failed to send message. Please check bot logs for errors: {e}")
     logging.error(f"Error sending message: {e}")
 
 
-def edit_message(update, context):
+async def edit_message(update, context):
    """Allows the user to edit the message."""
    query = update.callback_query
    context.user_data['state'] = BotState.ENTERING_MESSAGE
-   query.edit_message_text("Please enter new message to send.")
+   await query.edit_message_text("Please enter new message to send.")
 
 
-def cancel_send(update, context):
+async def cancel_send(update, context):
   """Cancels the message and shows the main menu."""
   query = update.callback_query
-  query.answer(text="Send cancelled.", show_alert=True)
+  await query.answer(text="Send cancelled.", show_alert=True)
   context.user_data['state'] = BotState.IDLE
-  show_main_menu(update, context)
+  await show_main_menu(update, context)
 
-def button_handler(update, context):
+async def button_handler(update, context):
   """Handles button callbacks."""
   query = update.callback_query
-  query.answer()  # Acknowledge the callback
+  await query.answer()  # Acknowledge the callback
 
   if query.data == 'set_recipient':
-    set_recipient_id(update, context)
+    await set_recipient_id(update, context)
   elif query.data == 'enter_message':
-    enter_message(update, context)
+    await enter_message(update, context)
   elif query.data == 'send_message':
-    send_message(update, context)
+    await send_message(update, context)
   elif query.data == 'confirm_send':
-    confirm_send(update, context)
+    await confirm_send(update, context)
   elif query.data == 'edit_message':
-    edit_message(update, context)
+    await edit_message(update, context)
   elif query.data == 'cancel_send':
-    cancel_send(update, context)
+    await cancel_send(update, context)
 
-def main():
+async def main():
     """Start the bot."""
-    updater = Updater(TOKEN)    
-    dispatcher = updater.dispatcher
+    application = Application.builder().token(TOKEN).build()
+    dispatcher = application.dispatcher
 
     # Add command handler to handle /start command
     dispatcher.add_handler(CommandHandler("start", start))
@@ -193,10 +192,11 @@ def main():
     dispatcher.add_handler(MessageHandler(Filters.text, handle_message_input))
 
     # Start the bot
-    updater.start_polling()
+    await application.run_polling()
 
     # Run the bot until you press Ctrl-C
-    updater.idle()
+    await application.idle()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
